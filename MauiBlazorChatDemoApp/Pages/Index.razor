@@ -1,0 +1,73 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.SignalR.Client
+
+<MudText>@_client.State</MudText>
+
+<MudPaper Height="200px" >
+    @foreach (var message in _messages)
+    {
+        if (message.Key)
+        {
+            <div class="d-flex flex-row-reverse flex-grow-1 my-4">
+                <MudPaper Class="py-1 px-3 mud-theme-primary rounded-pill">@message.Value</MudPaper>
+            </div>
+            continue;
+        }
+        <div class="d-flex flex-grow-1 my-4">
+            <MudPaper Class="py-1 px-3 mud-theme-primary rounded-pill">@message.Value</MudPaper>
+        </div>
+    }
+</MudPaper>
+
+<div class="d-flex flex-grow-1 my-4">
+    <MudTextField @bind-Value="TextValue"/>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Send">Send</MudButton>
+</div>
+
+@code {
+    public string TextValue { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        _messages = new();
+
+        _client = new HubConnectionBuilder()
+            .WithUrl("https://webapplication120220916122542.azurewebsites.net/chat")
+            .WithAutomaticReconnect()
+            .Build();
+
+        _client.Reconnected += async (state) =>
+        {
+            await InvokeAsync(StateHasChanged);
+        };
+
+        _client.On<string, string>("MessageReceived", (user, message) =>
+        {
+            if (user == User) return;
+            _messages.Add(new(false, message));
+            InvokeAsync(StateHasChanged);
+        });
+
+        Task.Run(async () =>
+        {
+            await _client.StartAsync();
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private List<KeyValuePair<bool,string>> _messages;
+    private HubConnection _client;
+    private string User => OperatingSystem.IsAndroid() ? "AndroidUser" : "WindowsUser";
+
+    private async void Send()
+    {
+        if (string.IsNullOrEmpty(TextValue))
+            return;
+
+        _messages.Add(new(true, TextValue));
+        await _client.InvokeCoreAsync("SendMessage", new[] { User, TextValue });
+        TextValue = string.Empty;
+    }
+
+}
